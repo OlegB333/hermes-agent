@@ -7223,6 +7223,9 @@ class GatewayRunner:
         if canonical == "personality":
             return await self._handle_personality_command(event)
 
+        if canonical == "role":
+            return await self._handle_role_command(event)
+
         if canonical == "kanban":
             return await self._handle_kanban_command(event)
 
@@ -7860,6 +7863,13 @@ class GatewayRunner:
                         pass
                 if route_decision.get("system_prompt"):
                     event.channel_prompt = route_decision["system_prompt"]
+                # Store badge for response decoration
+                badge = route_decision.get("badge")
+                if badge:
+                    try:
+                        event._role_badge = badge
+                    except Exception:
+                        pass
         except Exception as e:
             logger.error("Role routing hook failed: %s", e)
 
@@ -8475,6 +8485,11 @@ class GatewayRunner:
                 return None
 
             response = agent_result.get("final_response") or ""
+
+            # Prepend role badge when multi-role routing detected a switch
+            _role_badge = getattr(event, "_role_badge", None)
+            if _role_badge and response and response != "(empty)":
+                response = f"{_role_badge} {response}"
 
             # Convert the agent's internal "(empty)" sentinel into a
             # user-friendly message.  "(empty)" means the model failed to
@@ -10345,6 +10360,64 @@ class GatewayRunner:
 
         available = "`none`, " + ", ".join(f"`{n}`" for n in personalities)
         return t("gateway.personality.unknown", name=args, available=available)
+
+    async def _handle_role_command(self, event: MessageEvent) -> str:
+        """Handle /role command — list, switch, or disable multi-role routing."""
+        args = event.get_command_args().strip().lower()
+
+        try:
+            config = _load_gateway_config()
+        except Exception:
+            config = {}
+
+        roles_config = config.get("roles", {})
+        definitions = roles_config.get("definitions", [])
+        enabled = roles_config.get("enabled", False)
+
+        if not definitions:
+            return "⚙️ No roles defined. Add role definitions to `roles.definitions` in config.yaml."
+
+        if args == "off":
+            # Clear sticky state and signal disabled
+            try:
+                from gateway.builtin_hooks.role_router import clear_sticky
+                clear_sticky()
+            except Exception:
+                pass
+            return "🔕 Role routing disabled for this session. Sticky cache cleared."
+
+        if args == "list" or not args:
+            status = "✅ enabled" if enabled else "❌ disabled"
+            lines = [f"**Multi-role routing**: {status}"]
+            lines.append(f"**Classifier**: `{roles_config.get('classifier_model', 'auto')}`")
+            lines.append(f"**Sticky count**: {roles_config.get('sticky_count', 3)}")
+            lines.append("")
+            lines.append("**Defined roles:**")
+            for role in definitions:
+                emoji = role.get("emoji", "🤖")
+                name = role.get("name", "?")
+                desc = role.get("description", "")
+                lines.append(f"  {emoji} **{name}** — {desc}")
+            if not enabled:
+                lines.append("\n_Enable with `roles.enabled: true` in config.yaml_")
+            return "\n".join(lines)
+
+        # Manual role switch: /role <name>
+        for role in definitions:
+            if role.get("name", "").lower() == args:
+                try:
+                    from gateway.builtin_hooks.role_router import _set_sticky, _source_key, _last_role
+                    sticky_count = roles_config.get("sticky_count", 3)
+                    sk = f"{event.source.platform.value}:{event.source.chat_id}:{event.source.user_id}"
+                    _set_sticky(sk, role["name"], sticky_count + 1)
+                    _last_role[sk] = role["name"]
+                except Exception:
+                    pass
+                emoji = role.get("emoji", "🤖")
+                return f"{emoji} Switched to role **{role['name']}** for the next {roles_config.get('sticky_count', 3)} messages."
+
+        available = ", ".join(f"`{r.get('name', '?')}`" for r in definitions)
+        return f"Unknown role `{args}`. Available: {available}"
 
     async def _handle_retry_command(self, event: MessageEvent) -> str:
         """Handle /retry command - re-send the last user message."""

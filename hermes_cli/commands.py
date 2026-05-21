@@ -116,6 +116,8 @@ COMMAND_REGISTRY: list[CommandDef] = [
 
     # Configuration
     CommandDef("sessions", "Browse and resume previous sessions", "Session"),
+    CommandDef("role", "Show, switch, or disable multi-role routing", "Configuration",
+               args_hint="[name|list|off]"),
 
     # Configuration
     CommandDef("config", "Show current configuration", "Configuration",

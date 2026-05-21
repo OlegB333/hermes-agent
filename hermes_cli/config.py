@@ -591,6 +591,10 @@ DEFAULT_CONFIG = {
     "roles": {
         "enabled": False,
         "classifier_model": "google/gemini-2.0-flash",
+        "sticky_count": 3,
+        "show_badge": True,
+        "badge_format": "emoji",
+        "badge_display": "on_switch",
         "definitions": [],
     },
     
