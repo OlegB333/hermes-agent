@@ -15,6 +15,7 @@ Events:
   - agent:step          -- Each turn in the tool-calling loop
   - agent:end           -- Agent finishes processing
   - command:*           -- Any slash command executed (wildcard match)
+  - message:pre_route   -- Before session routing (role auto-routing)
 
 Errors in hooks are caught and logged but never block the main pipeline.
 """
@@ -53,13 +54,18 @@ class HookRegistry:
         return list(self._loaded_hooks)
 
     def _register_builtin_hooks(self) -> None:
-        """Register built-in hooks that are always active.
-
-        Currently empty — no shipped built-in hooks. Kept as the extension
-        point for future always-on gateway hooks so they drop in without
-        re-plumbing discover_and_load().
-        """
-        return
+        """Register built-in hooks that are always active."""
+        try:
+            from gateway.builtin_hooks.role_router import handle as role_router_handle
+            self._handlers.setdefault("message:pre_route", []).append(role_router_handle)
+            self._loaded_hooks.append({
+                "name": "role_router",
+                "description": "Multi-role auto-routing",
+                "events": ["message:pre_route"],
+                "path": "gateway/builtin_hooks/role_router.py",
+            })
+        except Exception as e:
+            print(f"[hooks] Failed to load built-in hook role_router: {e}", flush=True)
 
     def discover_and_load(self) -> None:
         """

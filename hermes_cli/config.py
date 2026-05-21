@@ -587,6 +587,12 @@ DEFAULT_CONFIG = {
         "image_input_mode": "auto",
         "disabled_toolsets": [],
     },
+
+    "roles": {
+        "enabled": False,
+        "classifier_model": "google/gemini-2.0-flash",
+        "definitions": [],
+    },
     
     "terminal": {
         "backend": "local",

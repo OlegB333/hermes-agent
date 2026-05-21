@@ -7848,6 +7848,21 @@ class GatewayRunner:
             except Exception:
                 pass
 
+        try:
+            hook_results = await self.hooks.emit_collect("message:pre_route", {"event": event, "source": source})
+            if hook_results:
+                route_decision = hook_results[-1]
+                if route_decision.get("role_thread_id"):
+                    source = dataclasses.replace(source, thread_id=route_decision["role_thread_id"])
+                    try:
+                        event.source = source
+                    except Exception:
+                        pass
+                if route_decision.get("system_prompt"):
+                    event.channel_prompt = route_decision["system_prompt"]
+        except Exception as e:
+            logger.error("Role routing hook failed: %s", e)
+
         session_entry = self.session_store.get_or_create_session(source)
         session_key = session_entry.session_key
         self._cache_session_source(session_key, source)
